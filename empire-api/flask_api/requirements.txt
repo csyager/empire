@@ -1,0 +1,7 @@
+requests
+flask
+flask-lambda
+boto3
+marshmallow==3.21.2
+Werkzeug==2.0.3
+thefuzz==0.22.1

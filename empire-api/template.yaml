@@ -1,0 +1,103 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  empire-api
+
+  Sample SAM Template for empire-api
+
+# More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
+Globals:
+  Function:
+    Timeout: 10
+
+Parameters:
+  ExecEnv:
+    Type: String
+    AllowedValues:
+      - local
+      - prod
+    Default: prod
+  GamesTableName:
+    Type: String
+    Default: EmpireGamesTable
+  PlayersTableName:
+    Type: String
+    Default: EmpirePlayersTable
+
+Resources:
+  ApiFunction:
+    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Properties:
+      CodeUri: flask_api/
+      Handler: app.app
+      Runtime: python3.12
+      Architectures:
+      - x86_64
+      Events:
+        HealthCheck:
+          Type: Api # More info about API Event Source: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#api
+          Properties:
+            Path: /
+            Method: get
+        GetGame:
+          Type: Api
+          Properties:
+            Path: /game
+            Method: get
+        CreateGame:
+          Type: Api
+          Properties:
+            Path: /game
+            Method: post
+        SetName:
+          Type: Api
+          Properties:
+            Path: /game/{game_id}/player/{player_id}
+            Method: post
+      Environment:
+        Variables:
+          REGION_NAME: !Ref AWS::Region
+          EXEC_ENV: !Ref ExecEnv
+          GAMES_TABLE_NAME: !Ref GamesTableName
+          PLAYERS_TABLE_NAME: !Ref PlayersTableName
+  # ddb tables
+  GamesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Ref GamesTableName
+      AttributeDefinitions:
+        - AttributeName: game_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: game_id
+          KeyType: HASH
+      BillingMode: PAY_PER_REQUEST
+  PlayersTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Ref PlayersTableName
+      AttributeDefinitions:
+        - AttributeName: game_id
+          AttributeType: S
+        - AttributeName: player_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: game_id
+          KeyType: HASH
+        - AttributeName: game_id
+          KeyType: RANGE
+      BillingMode: PAY_PER_REQUEST
+
+Outputs:
+  # ServerlessRestApi is an implicit API created out of Events key under Serverless::Function
+  # Find out more about other implicit resources you can reference within SAM
+  # https://github.com/awslabs/serverless-application-model/blob/master/docs/internals/generated_resources.rst#api
+  Api:
+    Description: API Gateway endpoint URL for Prod stage for Hello World function
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/hello/"
+  ApiFunction:
+    Description: Hello World Lambda Function ARN
+    Value: !GetAtt ApiFunction.Arn
+  ApiFunctionIamRole:
+    Description: Implicit IAM Role created for Hello World function
+    Value: !GetAtt ApiFunctionRole.Arn
