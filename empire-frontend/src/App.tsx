@@ -1,33 +1,23 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
+import "bootstrap/dist/css/bootstrap.min.css";
+
+import Login from './components/Login.tsx';
+import Game from './components/Game.tsx';
+
 import './App.css'
 
 function App() {
-  const [count, setCount] = useState(0)
-
+  let gameId = localStorage.getItem('empire.gameId');
+  let playerId = localStorage.getItem('empire.userId');
+  console.log(gameId);
   return (
     <>
-      <div>
-        <a href="https://vitejs.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
+      <div className="container">
+        <h1 className="app-title display-1">Empire</h1>
+        <div className="container">
+          {(gameId !== null && playerId !== null) && <Game gameId={gameId} playerId={playerId}/>}
+          {(gameId === null || playerId === null) && <Login />}
+        </div>
       </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
     </>
   )
 }

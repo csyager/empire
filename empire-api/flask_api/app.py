@@ -13,7 +13,7 @@ from thefuzz import fuzz
 
 from boto3.dynamodb.conditions import Key
 
-from validation import GetGameSchema, SetNameSchema
+from validation import GetGameSchema, SetNameSchema, CreateGameSchema
 
 logger = logging.getLogger()
 logger.setLevel('INFO')
@@ -24,8 +24,15 @@ REGION = os.environ['REGION_NAME']
 GAMES_TABLE_NAME = os.environ['GAMES_TABLE_NAME']
 PLAYERS_TABLE_NAME = os.environ['PLAYERS_TABLE_NAME']
 
+CORS_HEADERS = {
+    "Access-Control-Allow-Headers" : "Content-Type,X-Amz-Date,Authorization,X-Api-Key,x-requested-with",
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "OPTIONS,POST,GET"
+}
+
 
 if EXEC_ENV == 'local':
+    logger.info("using local configuration")
     dynamodb = boto3.resource('dynamodb', endpoint_url='http://dynamodb:8000')
 else:
     dynamodb = boto3.resource('dynamodb', region_name=REGION)
@@ -56,8 +63,8 @@ def get_game():
     if errors:
         return (
             json.dumps({'message': constants.VALIDATION_ERROR_MESSAGE.format(errors)}),
-            400
-            # CORS_HEADERS
+            400,
+            CORS_HEADERS
         )
     
     logger.info("requested game_id: " + game_id)
@@ -71,8 +78,8 @@ def get_game():
                 "Count": response.get("Count"),
                 "Items": response.get("Items")
             }, cls=JSONEncoder),
-            200
-            # CORS_HEADERS
+            200,
+            CORS_HEADERS
         )
     except Exception as err:
         logger.error(
@@ -83,7 +90,7 @@ def get_game():
         return (
             json.dumps({'message': constants.SERVER_ERROR_MESSAGE}),
             500,
-            # CORS_HEADERS
+            CORS_HEADERS
         )
     
 
@@ -91,8 +98,19 @@ def get_game():
 def create_game():
     game_id = create_game_id(constants.GAME_ID_LEN)
     logger.info(f"Creating game with ID {game_id}")
+    data = json.loads(request.data)
+    create_game_schema = CreateGameSchema()
+    errors = create_game_schema.validate(data)
+    if errors:
+        return (
+            json.dumps({'message': constants.VALIDATION_ERROR_MESSAGE}),
+            400,
+            CORS_HEADERS
+        )
+    
     table_item = {
-        "game_id": game_id
+        "game_id": game_id,
+        "host": data["host"]
     }
     try:
         logger.info(f"Writing game {json.dumps(table_item)} to dynamodb")
@@ -101,6 +119,7 @@ def create_game():
         return (
             table_item,
             201,
+            CORS_HEADERS
         )
     except Exception as err:
         logger.error(
@@ -110,9 +129,111 @@ def create_game():
         )
         return (
             json.dumps({'message': constants.SERVER_ERROR_MESSAGE}),
-            500
+            500,
+            CORS_HEADERS
         )
 
+
+@app.get('/game/<game_id>/player/<player_id>')
+def get_name(game_id, player_id):
+    logger.info(f"getting name for player {player_id} in game {game_id}")
+    try:
+        player = players_table.get_item(
+            Key={"game_id": game_id, "player_id": player_id}
+        )
+        logger.info(f"response from ddb: {player}")
+        if player.get("Item"):
+            return (
+                json.dumps(player.get("Item")), 
+                200,
+                CORS_HEADERS
+            )
+        else:
+            return (
+                json.dumps({'message': constants.PLAYER_ID_NOT_FOUND.format(player_id)}), 
+                404,
+                CORS_HEADERS
+            )
+    except Exception as err:
+        logger.error(
+            "Caught exception reading from dynamodb table %s:  %s",
+            players_table.name,
+            err
+        )
+        return (
+            json.dumps({'message': constants.SERVER_ERROR_MESSAGE}),
+            500,
+            CORS_HEADERS
+        )
+    
+
+@app.get('/game/<game_id>/players')
+def get_game_names(game_id):
+    logger.info(f"getting names selected by all players in game {game_id}")
+    try:
+        players = players_table.query(
+            KeyConditionExpression=Key('game_id').eq(game_id)
+        )
+        return (
+            json.dumps(players.get("Items")),
+            200,
+            CORS_HEADERS
+        )
+    except Exception as err:
+        logger.error(
+            "Caught exception reading from dynamodb table %s:  %s",
+            players_table.name,
+            err
+        )
+        return (
+            json.dumps({'message': constants.SERVER_ERROR_MESSAGE}),
+            500,
+            CORS_HEADERS
+        )
+    
+@app.post('/game/<game_id>/reset')
+def reset_game(game_id):
+    logger.info(f"resetting names selected by all players in game {game_id}")
+    try:
+        players = players_table.query(
+            KeyConditionExpression=Key('game_id').eq(game_id)
+        )
+
+    except Exception as err:
+        logger.error(
+            "Caught exception reading from dynamodb table %s:  %s",
+            players_table.name,
+            err
+        )
+        return (
+            json.dumps({'message': constants.SERVER_ERROR_MESSAGE}),
+            500,
+            CORS_HEADERS
+        )
+
+    try:
+        with players_table.batch_writer() as batch:
+            for player in players["Items"]:
+                batch.delete_item(Key={'game_id': game_id, 'player_id': player["player_id"]})
+    
+        return (
+            json.dumps({'message': "Successfully cleared messages"}),
+            200,
+            CORS_HEADERS
+        )
+        
+    except Exception as err:
+        logger.error(
+            "Caught exception batch deleting from dynamodb table %s:  %s",
+            players_table.name,
+            err
+        )
+        return (
+            json.dumps({'message': constants.SERVER_ERROR_MESSAGE}),
+            500,
+            CORS_HEADERS
+        )
+    
 
 @app.post('/game/<game_id>/player/<player_id>')
 def set_name(game_id, player_id):
@@ -134,6 +255,7 @@ def set_name(game_id, player_id):
         return (
             json.dumps({'message': constants.UNPARSEABLE_INPUT_MESSAGE}),
             400,
+            CORS_HEADERS
         )
     
     # validation
@@ -143,6 +265,7 @@ def set_name(game_id, player_id):
         return (
             json.dumps({'message': constants.VALIDATION_ERROR_MESSAGE}),
             400,
+            CORS_HEADERS
         )
     
     if not data.get("override", False):
@@ -158,8 +281,12 @@ def set_name(game_id, player_id):
                 if fuzzy_result > constants.FUZZY_RATIO_THRESHOLD:
                     # likely a match, raise an error
                     return (
-                        json.dumps({'message': constants.DUPLICATE_NAME_MESSAGE.format(submitted_name, existing_name)}),
-                        400
+                        json.dumps({
+                            'message': constants.DUPLICATE_NAME_MESSAGE.format(submitted_name, existing_name),
+                            'duplicateName': existing_name
+                        }),
+                        409,
+                        CORS_HEADERS
                     )
     else:
         logging.info("override set, skipping duplicate name check")
@@ -171,6 +298,7 @@ def set_name(game_id, player_id):
         return (
             json.dumps(payload),
             200,
+            CORS_HEADERS
         )
     except Exception as err:
         logger.error(
@@ -181,4 +309,5 @@ def set_name(game_id, player_id):
         return (
             json.dumps({'message': constants.SERVER_ERROR_MESSAGE}),
             500,
+            CORS_HEADERS
         )

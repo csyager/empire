@@ -20,7 +20,7 @@ resolve_s3 = true
 s3_prefix = "empire-api"
 region = "us-east-1"
 disable_rollback = true
-parameter_overrides = "ExecEnv=\"prod\""
+parameter_overrides = "ExecEnv=\"prod\" GamesTableName=\"EmpireGamesTable\" PlayersTableName=\"EmpirePlayersTable\""
 image_repositories = []
 
 [default.package.parameters]

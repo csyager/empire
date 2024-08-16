@@ -9,6 +9,12 @@ Description: >
 Globals:
   Function:
     Timeout: 10
+  Api:
+    Cors:
+      AllowMethods: "'GET,POST,OPTIONS'"
+      AllowHeaders: "'content-type'"
+      AllowOrigin: "'*'"
+      AllowCredentials: "'*'"
 
 Parameters:
   ExecEnv:
@@ -33,6 +39,8 @@ Resources:
       Runtime: python3.12
       Architectures:
       - x86_64
+      Policies:
+      - AmazonDynamoDBFullAccess
       Events:
         HealthCheck:
           Type: Api # More info about API Event Source: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#api
@@ -53,6 +61,21 @@ Resources:
           Type: Api
           Properties:
             Path: /game/{game_id}/player/{player_id}
+            Method: post
+        GetName:
+          Type: Api
+          Properties:
+            Path: /game/{game_id}/player/{player_id}
+            Method: get
+        GetGameNames:
+          Type: Api
+          Properties:
+            Path: /game/{game_id}/players
+            Method: get
+        ResetGameNames:
+          Type: Api
+          Properties:
+            Path: /game/{game_id}/reset
             Method: post
       Environment:
         Variables:
@@ -84,7 +107,7 @@ Resources:
       KeySchema:
         - AttributeName: game_id
           KeyType: HASH
-        - AttributeName: game_id
+        - AttributeName: player_id
           KeyType: RANGE
       BillingMode: PAY_PER_REQUEST
 

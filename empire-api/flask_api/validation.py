@@ -7,3 +7,7 @@ class GetGameSchema(Schema):
 class SetNameSchema(Schema):
     name = fields.Str(required=True)
     override = fields.Bool(required=False)
+
+
+class CreateGameSchema(Schema):
+    host = fields.Str(required=True)

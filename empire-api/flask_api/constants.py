@@ -8,6 +8,7 @@ SERVER_ERROR_MESSAGE = "Encountered an unexpected server exception."
 VALIDATION_ERROR_MESSAGE = "Invalid input: {}"
 UNPARSEABLE_INPUT_MESSAGE = "Input could not be parsed."
 DUPLICATE_NAME_MESSAGE = "The submitted name ({}) looks pretty similar to a previously submitted name ({}).  To override, set `\"override\": true` in the JSON payload"
+PLAYER_ID_NOT_FOUND = "Player with player_id = {} not found."
 
 GAME_ID_LEN = 8
 
