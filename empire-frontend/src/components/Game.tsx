@@ -207,6 +207,23 @@ export default function Game(props: any) {
             });
     }, []);
 
+    function resetName() {
+        setLoading(true);
+        let request = {
+            name: ""
+        };
+        axios.post(API_BASE_URL + '/game/' + props.gameId + '/player/' + props.playerId, request)
+        .then(response => {
+            console.log(response);
+            setPlayerName("");
+        }).catch((error) => {
+            console.log("error: " + error);
+            setErrorMsg(UNEXPECTED_ERROR_MSG);
+        }).finally(() => {
+            setLoading(false);
+        })
+    }
+
     function leaveGame() {
         localStorage.removeItem("empire.userId");
         localStorage.removeItem("empire.gameId");
@@ -256,7 +273,8 @@ export default function Game(props: any) {
                         <div className="form-check form-switch">
                             <input className="form-check-input" type="checkbox" role="switch" onChange={() => setBlurPlayerName(!blurPlayerName)} checked={blurPlayerName}/>
                             <label className="form-check-label">Blur name</label>
-                        </div>
+                        </div><br />
+                        <button className="btn btn-primary" onClick={resetName}>Choose a different name</button><br />
                         { isHost && 
                         <>
                             <NameListComponent gameId={props.gameId} setLoading={setLoading} setErrorMsg={setErrorMsg} />
