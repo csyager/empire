@@ -1,5 +1,6 @@
 requests
 flask
+flask-cors
 flask-lambda
 boto3
 marshmallow==3.21.2

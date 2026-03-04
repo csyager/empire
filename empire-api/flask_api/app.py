@@ -2,18 +2,20 @@ import json
 import logging
 import os
 import boto3
+import random
 
-from JSONEncoder import JSONEncoder
-from util import create_game_id
-import constants
+from .JSONEncoder import JSONEncoder
+from .util import create_game_id
+from . import constants
 
 from flask import request
+from flask_cors import CORS
 from flask_lambda import FlaskLambda
 from thefuzz import fuzz
 
 from boto3.dynamodb.conditions import Key
 
-from validation import GetGameSchema, SetNameSchema, CreateGameSchema
+from .validation import GetGameSchema, SetNameSchema, CreateGameSchema
 
 logger = logging.getLogger()
 logger.setLevel('INFO')
@@ -24,20 +26,15 @@ REGION = os.environ['REGION_NAME']
 GAMES_TABLE_NAME = os.environ['GAMES_TABLE_NAME']
 PLAYERS_TABLE_NAME = os.environ['PLAYERS_TABLE_NAME']
 
-CORS_HEADERS = {
-    "Access-Control-Allow-Headers" : "Content-Type,X-Amz-Date,Authorization,X-Api-Key,x-requested-with",
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "OPTIONS,POST,GET"
-}
-
 
 if EXEC_ENV == 'local':
     logger.info("using local configuration")
-    dynamodb = boto3.resource('dynamodb', endpoint_url='http://dynamodb:8000')
+    dynamodb = boto3.resource('dynamodb', endpoint_url='http://localhost:8000')
 else:
     dynamodb = boto3.resource('dynamodb', region_name=REGION)
 
 app = FlaskLambda(__name__)
+CORS(app)
 
 games_table = dynamodb.Table(GAMES_TABLE_NAME)
 players_table = dynamodb.Table(PLAYERS_TABLE_NAME)
@@ -63,8 +60,7 @@ def get_game():
     if errors:
         return (
             json.dumps({'message': constants.VALIDATION_ERROR_MESSAGE.format(errors)}),
-            400,
-            CORS_HEADERS
+            400
         )
     
     logger.info("requested game_id: " + game_id)
@@ -78,8 +74,7 @@ def get_game():
                 "Count": response.get("Count"),
                 "Items": response.get("Items")
             }, cls=JSONEncoder),
-            200,
-            CORS_HEADERS
+            200
         )
     except Exception as err:
         logger.error(
@@ -89,8 +84,7 @@ def get_game():
         )
         return (
             json.dumps({'message': constants.SERVER_ERROR_MESSAGE}),
-            500,
-            CORS_HEADERS
+            500
         )
     
 
@@ -104,13 +98,13 @@ def create_game():
     if errors:
         return (
             json.dumps({'message': constants.VALIDATION_ERROR_MESSAGE}),
-            400,
-            CORS_HEADERS
+            400
         )
     
     table_item = {
         "game_id": game_id,
-        "host": data["host"]
+        "host": data["host"],
+        "active": "false"
     }
     try:
         logger.info(f"Writing game {json.dumps(table_item)} to dynamodb")
@@ -118,8 +112,7 @@ def create_game():
         logger.info(f"ddb response: {response}")
         return (
             table_item,
-            201,
-            CORS_HEADERS
+            201
         )
     except Exception as err:
         logger.error(
@@ -129,8 +122,7 @@ def create_game():
         )
         return (
             json.dumps({'message': constants.SERVER_ERROR_MESSAGE}),
-            500,
-            CORS_HEADERS
+            500
         )
 
 
@@ -145,14 +137,12 @@ def get_name(game_id, player_id):
         if player.get("Item"):
             return (
                 json.dumps(player.get("Item")), 
-                200,
-                CORS_HEADERS
+                200
             )
         else:
             return (
                 json.dumps({'message': constants.PLAYER_ID_NOT_FOUND.format(player_id)}), 
-                404,
-                CORS_HEADERS
+                404
             )
     except Exception as err:
         logger.error(
@@ -162,8 +152,7 @@ def get_name(game_id, player_id):
         )
         return (
             json.dumps({'message': constants.SERVER_ERROR_MESSAGE}),
-            500,
-            CORS_HEADERS
+            500
         )
     
 
@@ -174,11 +163,12 @@ def get_game_names(game_id):
         players = players_table.query(
             KeyConditionExpression=Key('game_id').eq(game_id)
         )
+
         return (
             json.dumps(players.get("Items")),
-            200,
-            CORS_HEADERS
+            200
         )
+                
     except Exception as err:
         logger.error(
             "Caught exception reading from dynamodb table %s:  %s",
@@ -187,9 +177,39 @@ def get_game_names(game_id):
         )
         return (
             json.dumps({'message': constants.SERVER_ERROR_MESSAGE}),
-            500,
-            CORS_HEADERS
+            500
         )
+
+@app.post('/game/<game_id>/choose-host')
+def choose_host(game_id):
+    logger.info(f"choosing leader for game {game_id}")
+    try:
+        game = games_table.query(
+            KeyConditionExpression=Key('game_id').eq(game_id)
+        )
+        players = players_table.query(
+            KeyConditionExpressoin=Key('game_id').eq(game_id)
+        )
+    except Exception as err:
+        logger.error(
+            "Caught exception reading from dynamodb tables:  %s",
+            err
+        )
+        return (
+            json.dumps({'message': constants.SERVER_ERROR_MESSAGE}),
+            500
+        )
+
+    random_element = random.choice(players["Items"])
+    game["Items"][0]["host"] = random_element["player_id"]
+    games_table.put_item(Item=game["Items"][0])
+
+    return (
+        json.dumps({'host': random_element["player_id"]}), 
+        200
+    )
+
+
     
 @app.post('/game/<game_id>/reset')
 def reset_game(game_id):
@@ -199,6 +219,9 @@ def reset_game(game_id):
             KeyConditionExpression=Key('game_id').eq(game_id)
         )
 
+    # select new host 
+
+
     except Exception as err:
         logger.error(
             "Caught exception reading from dynamodb table %s:  %s",
@@ -207,8 +230,7 @@ def reset_game(game_id):
         )
         return (
             json.dumps({'message': constants.SERVER_ERROR_MESSAGE}),
-            500,
-            CORS_HEADERS
+            500
         )
 
     try:
@@ -218,8 +240,7 @@ def reset_game(game_id):
     
         return (
             json.dumps({'message': "Successfully cleared messages"}),
-            200,
-            CORS_HEADERS
+            200
         )
         
     except Exception as err:
@@ -230,8 +251,7 @@ def reset_game(game_id):
         )
         return (
             json.dumps({'message': constants.SERVER_ERROR_MESSAGE}),
-            500,
-            CORS_HEADERS
+            500
         )
     
 
@@ -240,7 +260,7 @@ def set_name(game_id, player_id):
     logger.info("setting name")
     try:
         data = request.data
-        logger.info("request data: " + data)
+        logger.info(f"request data: {data}")
         data = json.loads(data)
         payload = {
             "game_id": game_id,
@@ -254,8 +274,7 @@ def set_name(game_id, player_id):
         )
         return (
             json.dumps({'message': constants.UNPARSEABLE_INPUT_MESSAGE}),
-            400,
-            CORS_HEADERS
+            400
         )
     
     # validation
@@ -264,8 +283,7 @@ def set_name(game_id, player_id):
     if errors:
         return (
             json.dumps({'message': constants.VALIDATION_ERROR_MESSAGE}),
-            400,
-            CORS_HEADERS
+            400
         )
     
     if not data.get("override", False):
@@ -285,8 +303,7 @@ def set_name(game_id, player_id):
                             'message': constants.DUPLICATE_NAME_MESSAGE.format(submitted_name, existing_name),
                             'duplicateName': existing_name
                         }),
-                        409,
-                        CORS_HEADERS
+                        409
                     )
     else:
         logging.info("override set, skipping duplicate name check")
@@ -297,8 +314,7 @@ def set_name(game_id, player_id):
         logger.info("ddb response: " + str(response))
         return (
             json.dumps(payload),
-            200,
-            CORS_HEADERS
+            200
         )
     except Exception as err:
         logger.error(
@@ -308,6 +324,5 @@ def set_name(game_id, player_id):
         )
         return (
             json.dumps({'message': constants.SERVER_ERROR_MESSAGE}),
-            500,
-            CORS_HEADERS
+            500
         )
